@@ -5,15 +5,6 @@ import git
 import mistune
 import os
 
-repo_path = "/home/david-gutierrez/Liferay/ENG/liferay-portal-ee"
-
-start_hash = "f63d698232b7b620536bb32f854286b132fcc07a"
-end_hash = "4a2e75e4e6fd4c225db62f303ccc33cdd1782ba4"
-
-amendments_file_path = repo_path + "/readme/BREAKING_CHANGES_AMENDMENTS.markdown"
-
-template_path = "/home/yo/projects/pretty-breaking-changes"
-
 breaking_change_report_keyword = "# breaking"
 
 markdown = mistune.create_markdown(renderer='ast')
