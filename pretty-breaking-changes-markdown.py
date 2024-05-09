@@ -34,7 +34,6 @@ def get_end_of_block_using_pattern(lines, start_index, end_pattern):
         else:
             break
 
-    # print(end_of_block_index)
     return end_of_block_index
 
 
