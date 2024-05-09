@@ -158,106 +158,144 @@ def get_first_level_path(file_path):
     return first_level_path
 
 
-liferay_portal_ee_repo = git.Repo(repo_path)
+def main(repo_path, repo_branch, start_hash, end_hash):
+    amendments_file_path = repo_path + "/readme/BREAKING_CHANGES_AMENDMENTS.markdown"
 
-print("Retrieving git info ...")
+    liferay_portal_ee_repo = git.Repo(repo_path)
 
-of_interest = liferay_portal_ee_repo.git.log(start_hash + ".." + end_hash, "--grep", "# breaking", "--pretty=format:%H")
-# of_interest = liferay_portal_ee_repo.git.log("--grep", "breaking_change_report", "--pretty=format:%H")
+    print("Checkout master and pull ...")
+    liferay_portal_ee_repo.git.checkout(repo_branch)
+    liferay_portal_ee_repo.git.fetch('--all')
+    liferay_portal_ee_repo.git.reset('--hard', 'origin/' + repo_branch)
 
-print("Processing git info ...")
+    print("Retrieving git info ...")
 
-individual_commit_hashes = of_interest.split('\n')
+    of_interest = liferay_portal_ee_repo.git.log(start_hash + ".." + end_hash, "--grep", "# breaking",
+                                                 "--pretty=format:%H")
+    # of_interest = liferay_portal_ee_repo.git.log("--grep", "breaking_change_report", "--pretty=format:%H")
 
-breaking_changes_info = {
-    h: decorate_breaking_change_info(result, {'committed_date': liferay_portal_ee_repo.commit(h).committed_date}) for h
-    in individual_commit_hashes if (result := dissect_commit_message(liferay_portal_ee_repo.commit(h).message))}
+    print("Processing git info ...")
 
-amendments = ""
+    individual_commit_hashes = of_interest.split('\n')
 
-with open(amendments_file_path) as f:
-    amendments = f.read()
+    breaking_changes_info = {
+        h: decorate_breaking_change_info(result, {'committed_date': liferay_portal_ee_repo.commit(h).committed_date})
+        for h
+        in individual_commit_hashes if (result := dissect_commit_message(liferay_portal_ee_repo.commit(h).message))}
 
-parsed = markdown.parse(amendments)
-interesting_indexes = [(i, type_of) for i in range(len(parsed)) if
-                       (type_of := parsed[0][i]['type']) == 'heading' or type_of == 'block_code']
+    with open(amendments_file_path) as f:
+        amendments = f.read()
 
-i = 0
-while i <= len(interesting_indexes) - 2:
-    if interesting_indexes[i][1] == 'heading' and interesting_indexes[i + 1][1] == 'block_code':
-        hash = parsed[interesting_indexes[i][0]]['children'][0]['text']
+    parsed = markdown.parse(amendments)
+    interesting_indexes = [(i, type_of) for i in range(len(parsed)) if
+                           (type_of := parsed[0][i]['type']) == 'heading' or type_of == 'block_code']
 
-        if hash in breaking_changes_info or (
-                liferay_portal_ee_repo.is_ancestor(start_hash, hash) and not liferay_portal_ee_repo.is_ancestor(
-                end_hash, hash)):
-            amended_message = parsed[interesting_indexes[i + 1][0]]['text']
-            breaking_changes_info[hash] = decorate_breaking_change_info(dissect_commit_message(amended_message), {
-                'committed_date': liferay_portal_ee_repo.commit(hash).committed_date})
+    i = 0
+    while i <= len(interesting_indexes) - 2:
+        if interesting_indexes[i][1] == 'heading' and interesting_indexes[i + 1][1] == 'block_code':
+            git_hash = parsed[interesting_indexes[i][0]]['children'][0]['text']
 
-            if len(breaking_changes_info[hash]) > 0:
-                print("Amending: " + str(breaking_changes_info[hash][0]['jira_ticket']))
-            else:
-                print("Error processing amendment message " + hash)
-                print(amended_message)
-                print()
+            if git_hash in breaking_changes_info or (
+                    liferay_portal_ee_repo.is_ancestor(start_hash, git_hash) and not liferay_portal_ee_repo.is_ancestor(
+                    end_hash, git_hash)):
+                amended_message = parsed[interesting_indexes[i + 1][0]]['text']
+                breaking_changes_info[git_hash] = decorate_breaking_change_info(dissect_commit_message(amended_message),
+                                                                                {
+                                                                                    'committed_date':
+                                                                                        liferay_portal_ee_repo.commit(
+                                                                                            git_hash).committed_date})
 
-        i += 2
-    else:
-        i += 1
+                if len(breaking_changes_info[git_hash]) > 0:
+                    print("Amending: " + str(breaking_changes_info[git_hash][0]['jira_ticket']))
+                else:
+                    print("Error processing amendment message " + git_hash)
+                    print(amended_message)
+                    print()
 
-affected_file_paths_and_hashes = {}
-
-for hash in breaking_changes_info:
-    # print(hash)
-    # print(breaking_changes_info[hash]['affected_file_path'])
-
-    for change in breaking_changes_info[hash]:
-        affected_file_path = change['affected_file_path']
-        # print(affected_file_path)
-        first_level_path = get_first_level_path(affected_file_path)
-
-        if not first_level_path in affected_file_paths_and_hashes:
-            affected_file_paths_and_hashes[first_level_path] = {}
-
-        if affected_file_path in affected_file_paths_and_hashes[first_level_path]:
-            affected_file_paths_and_hashes[first_level_path][affected_file_path].append(change)
+            i += 2
         else:
-            affected_file_paths_and_hashes[first_level_path][affected_file_path] = [change]
+            i += 1
 
-print("Generating output ...")
+    affected_file_paths_and_hashes = {}
 
-entire_output = ""
+    for git_hash in breaking_changes_info:
+        # print(hash)
+        # print(breaking_changes_info[hash]['affected_file_path'])
 
-for first_level_path in affected_file_paths_and_hashes:
-    for affected_file_path in affected_file_paths_and_hashes[first_level_path]:
-        file_name = os.path.basename(affected_file_path)
-        this_block = f'''
-# {affected_file_path}
-          
-{file_name} `{affected_file_path}`
-        '''
+        for change in breaking_changes_info[git_hash]:
+            affected_file_path = change['affected_file_path']
+            # print(affected_file_path)
+            first_level_path = get_first_level_path(affected_file_path)
 
-        for change in affected_file_paths_and_hashes[first_level_path][affected_file_path]:
-            this_block += '''
-* __Date:__ {committed_date}
-* __Ticket:__ [{jira_ticket}](https://liferay.atlassian.net/browse/{jira_ticket})
-* __What changed:__ {what_info}
-* __Reason:__ {why_info}
-            '''.format(**change)
+            if first_level_path not in affected_file_paths_and_hashes:
+                affected_file_paths_and_hashes[first_level_path] = {}
 
-            if 'alternatives' in change:
-                this_block += '''
-* __Alternatives:__ {alternatives}
-                '''.format(**change)
+            if affected_file_path in affected_file_paths_and_hashes[first_level_path]:
+                affected_file_paths_and_hashes[first_level_path][affected_file_path].append(change)
+            else:
+                affected_file_paths_and_hashes[first_level_path][affected_file_path] = [change]
 
-            this_block += '''
-&nbsp;
+    print("Generating output ...")
+
+    entire_output = ""
+
+    for first_level_path in affected_file_paths_and_hashes:
+        for affected_file_path in affected_file_paths_and_hashes[first_level_path]:
+            file_name = os.path.basename(affected_file_path)
+            this_block = f'''
+    # {affected_file_path}
+              
+    {file_name} `{affected_file_path}`
             '''
 
-        entire_output += this_block
+            for change in affected_file_paths_and_hashes[first_level_path][affected_file_path]:
+                this_block += '''
+    * __Date:__ {committed_date}
+    * __Ticket:__ [{jira_ticket}](https://liferay.atlassian.net/browse/{jira_ticket})
+    * __What changed:__ {what_info}
+    * __Reason:__ {why_info}
+                '''.format(**change)
 
-entire_output_fh = open('report.md', 'w')
+                if 'alternatives' in change:
+                    this_block += '''
+    * __Alternatives:__ {alternatives}
+                    '''.format(**change)
 
-entire_output_fh.write(entire_output)
+                this_block += '''
+    &nbsp;
+                '''
 
-entire_output_fh.close()
+            entire_output += this_block
+
+    entire_output_fh = open('report.md', 'w')
+
+    entire_output_fh.write(entire_output)
+
+    entire_output_fh.close()
+
+
+if __name__ == '__main__':
+    try:
+        path = sys.argv[1]
+    except IndexError:
+        print("Please provide a local path to the report")
+        exit()
+
+    try:
+        branch = sys.argv[2]
+    except IndexError:
+        print("Please provide a branch name")
+        exit()
+
+    try:
+        first_hash = sys.argv[3]
+    except IndexError:
+        print("Please provide a hash to start")
+        exit()
+
+    try:
+        final_hash = sys.argv[4]
+    except IndexError:
+        final_hash = "HEAD"
+
+    main(path, branch, first_hash, final_hash)
