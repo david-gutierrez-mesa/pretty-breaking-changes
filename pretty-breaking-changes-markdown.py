@@ -5,8 +5,6 @@ import git
 import mistune
 import os
 
-# import re
-
 repo_path = "/home/david-gutierrez/Liferay/ENG/liferay-portal-ee"
 
 start_hash = "f63d698232b7b620536bb32f854286b132fcc07a"
