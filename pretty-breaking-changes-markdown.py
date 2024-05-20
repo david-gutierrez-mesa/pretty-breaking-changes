@@ -153,7 +153,7 @@ def main(repo_path, repo_branch, start_hash, end_hash):
 
     liferay_portal_ee_repo = git.Repo(repo_path)
 
-    print("Checkout master and pull ...")
+    print("Checkout " + repo_branch + " and pull ...")
     liferay_portal_ee_repo.git.checkout(repo_branch)
     liferay_portal_ee_repo.git.fetch('--all')
     liferay_portal_ee_repo.git.reset('--hard', 'origin/' + repo_branch)
